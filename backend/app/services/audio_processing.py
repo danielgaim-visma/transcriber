@@ -62,7 +62,7 @@ def transcribe_audio(gcs_uri):
         current_app.logger.info(f"Sending transcription request for {gcs_uri}")
         operation = client.long_running_recognize(config=config, audio=audio)
         current_app.logger.info("Waiting for operation to complete...")
-        response = operation.result(timeout=90)
+        response = operation.result(timeout=180)
 
         transcript = ""
         for result in response.results:

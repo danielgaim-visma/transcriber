@@ -2,7 +2,7 @@ from flask import Blueprint, request, jsonify, current_app
 import os
 from werkzeug.utils import secure_filename
 from ..services.audio_processing import process_audio_file
-from ..services.summarization import summarize_transcript
+from ..services.summarization import generate_meeting_minutes  # Updated import
 import traceback
 
 meetings = Blueprint('meetings', __name__)
@@ -35,13 +35,13 @@ def upload_file():
             if transcript:
                 current_app.logger.info("Transcription successful")
 
-                # Generate summary
-                summary = summarize_transcript(transcript)
+                # Generate meeting minutes
+                meeting_minutes = generate_meeting_minutes(transcript)  # Updated function call
 
-                if summary:
-                    return jsonify({'transcript': transcript, 'summary': summary}), 200
+                if meeting_minutes:
+                    return jsonify({'transcript': transcript, 'meeting_minutes': meeting_minutes}), 200
                 else:
-                    return jsonify({'transcript': transcript, 'error': 'Summarization failed'}), 200
+                    return jsonify({'transcript': transcript, 'error': 'Meeting minutes generation failed'}), 200
             else:
                 current_app.logger.warning("Transcription failed")
                 return jsonify({'error': 'Transcription failed'}), 500
