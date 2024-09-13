@@ -7,6 +7,7 @@ const TranscriptionUI: React.FC = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [transcript, setTranscript] = useState('');
+  const [summary, setSummary] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -17,52 +18,55 @@ const TranscriptionUI: React.FC = () => {
   };
 
   const handleUpload = async () => {
-  if (!file) {
-    setError('Please select a file first');
-    return;
-  }
-
-  setIsUploading(true);
-  setUploadProgress(0);
-  setError(null);
-
-  const formData = new FormData();
-  formData.append('file', file);
-
-  try {
-    const response = await axios.post('http://localhost:5000/meetings/upload', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      onUploadProgress: (progressEvent) => {
-        const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
-        setUploadProgress(percentCompleted);
-      },
-    });
-
-    setTranscript(response.data.transcript);
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      console.error('Axios Error:', error.message);
-      console.error('Response data:', error.response?.data);
-      console.error('Response status:', error.response?.status);
-      console.error('Response headers:', error.response?.headers);
-
-      if (error.response?.status === 404) {
-        setError('API endpoint not found. Please check your server configuration.');
-      } else if (error.response?.status === 400) {
-        setError('Invalid file type or bad request. Please try again with a different file.');
-      } else if (error.response?.status === 500) {
-        setError('Server error. Please try again later.');
-      } else {
-        setError(`Error: ${error.message}`);
-      }
-    } else {
-      console.error('Unexpected error:', error);
-      setError('An unexpected error occurred. Please try again.');
+    if (!file) {
+      setError('Please select a file first');
+      return;
     }
-  } finally {
-    setIsUploading(false);
-  }
-};
+
+    setIsUploading(true);
+    setUploadProgress(0);
+    setError(null);
+    setTranscript('');
+    setSummary('');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await axios.post('http://localhost:5000/meetings/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
+          setUploadProgress(percentCompleted);
+        },
+      });
+
+      setTranscript(response.data.transcript);
+      setSummary(response.data.summary);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        console.error('Axios Error:', error.message);
+        console.error('Response data:', error.response?.data);
+        console.error('Response status:', error.response?.status);
+        console.error('Response headers:', error.response?.headers);
+
+        if (error.response?.status === 404) {
+          setError('API endpoint not found. Please check your server configuration.');
+        } else if (error.response?.status === 400) {
+          setError('Invalid file type or bad request. Please try again with a different file.');
+        } else if (error.response?.status === 500) {
+          setError('Server error. Please try again later.');
+        } else {
+          setError(`Error: ${error.message}`);
+        }
+      } else {
+        console.error('Unexpected error:', error);
+        setError('An unexpected error occurred. Please try again.');
+      }
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 py-6 flex flex-col justify-center sm:py-12">
@@ -71,7 +75,7 @@ const TranscriptionUI: React.FC = () => {
           <div className="max-w-md mx-auto">
             <div className="divide-y divide-gray-200">
               <div className="py-8 text-base leading-6 space-y-4 text-gray-700 sm:text-lg sm:leading-7">
-                <h2 className="text-3xl font-extrabold text-gray-900">Audio Transcription</h2>
+                <h2 className="text-3xl font-extrabold text-gray-900">Audio Transcription and Summary</h2>
                 <p className="text-gray-500">Upload an audio file to get started</p>
 
                 <div className="flex items-center justify-center w-full">
@@ -111,7 +115,7 @@ const TranscriptionUI: React.FC = () => {
                   ) : (
                     <>
                       <DocumentTextIcon className="w-5 h-5 mr-2" />
-                      Start Transcription
+                      Start Transcription and Summarization
                     </>
                   )}
                 </button>
@@ -120,6 +124,13 @@ const TranscriptionUI: React.FC = () => {
                   <div className="mt-4">
                     <h3 className="text-lg font-medium text-gray-900">Transcription Result:</h3>
                     <p className="mt-2 text-gray-600">{transcript}</p>
+                  </div>
+                )}
+
+                {summary && (
+                  <div className="mt-4">
+                    <h3 className="text-lg font-medium text-gray-900">Summary:</h3>
+                    <p className="mt-2 text-gray-600">{summary}</p>
                   </div>
                 )}
               </div>

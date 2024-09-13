@@ -2,9 +2,11 @@ from flask import Blueprint, request, jsonify, current_app
 import os
 from werkzeug.utils import secure_filename
 from ..services.audio_processing import process_audio_file
+from ..services.summarization import summarize_transcript
 import traceback
 
 meetings = Blueprint('meetings', __name__)
+
 
 @meetings.route('/upload', methods=['POST'])
 def upload_file():
@@ -32,7 +34,14 @@ def upload_file():
 
             if transcript:
                 current_app.logger.info("Transcription successful")
-                return jsonify({'transcript': transcript}), 200
+
+                # Generate summary
+                summary = summarize_transcript(transcript)
+
+                if summary:
+                    return jsonify({'transcript': transcript, 'summary': summary}), 200
+                else:
+                    return jsonify({'transcript': transcript, 'error': 'Summarization failed'}), 200
             else:
                 current_app.logger.warning("Transcription failed")
                 return jsonify({'error': 'Transcription failed'}), 500
@@ -43,6 +52,7 @@ def upload_file():
 
     current_app.logger.warning("Invalid file type")
     return jsonify({'error': 'File type not allowed'}), 400
+
 
 def allowed_file(filename):
     return '.' in filename and \
