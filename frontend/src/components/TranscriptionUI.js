@@ -1,18 +1,23 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { ArrowUpTrayIcon, DocumentTextIcon } from '@heroicons/react/24/solid';
+import { ArrowUpTrayIcon, DocumentTextIcon, ClipboardDocumentIcon, PrinterIcon } from '@heroicons/react/24/solid';
 import ReactMarkdown from 'react-markdown';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion"
+import { Button } from "./ui/button"
+import { Input } from "./ui/input"
 
-const TranscriptionUI: React.FC = () => {
-  const [file, setFile] = useState<File | null>(null);
+const TranscriptionUI = () => {
+  const [file, setFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [transcript, setTranscript] = useState('');
   const [meetingMinutes, setMeetingMinutes] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files) {
+  const handleFileChange = (event) => {
+    if (event.target.files && event.target.files[0]) {
       setFile(event.target.files[0]);
       setError(null);
     }
@@ -69,6 +74,26 @@ const TranscriptionUI: React.FC = () => {
     }
   };
 
+  const handleCopyToClipboard = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      alert('Copied to clipboard!');
+    });
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const highlightSearchTerm = (text) => {
+    if (!searchTerm) return text;
+    const parts = text.split(new RegExp(`(${searchTerm})`, 'gi'));
+    return parts.map((part, i) =>
+      part.toLowerCase() === searchTerm.toLowerCase()
+        ? <mark key={i} className="bg-yellow-300 text-black">{part}</mark>
+        : part
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-900 py-6 flex flex-col justify-center sm:py-12">
       <div className="relative py-3 sm:max-w-4xl sm:mx-auto">
@@ -98,12 +123,10 @@ const TranscriptionUI: React.FC = () => {
                   <p className="text-sm text-red-400">{error}</p>
                 )}
 
-                <button
+                <Button
                   onClick={handleUpload}
                   disabled={!file || isUploading}
-                  className={`w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white ${
-                    !file || isUploading ? 'bg-gray-600 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500'
-                  }`}
+                  className="w-full"
                 >
                   {isUploading ? (
                     <>
@@ -119,26 +142,58 @@ const TranscriptionUI: React.FC = () => {
                       Start Transcription and Generate Minutes
                     </>
                   )}
-                </button>
+                </Button>
 
-                {transcript && (
-                  <div className="mt-4">
-                    <h3 className="text-xl font-medium text-white">Transcription Result:</h3>
-                    <div className="mt-2 p-4 bg-gray-700 rounded-lg">
-                      <p className="text-gray-300 whitespace-pre-wrap">{transcript}</p>
+                {(transcript || meetingMinutes) && (
+                  <>
+                    <div className="flex justify-between items-center mt-6">
+                      <Input
+                        type="text"
+                        placeholder="Search in minutes and transcript..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-2/3"
+                      />
+                      <Button onClick={() => handleCopyToClipboard(meetingMinutes)} className="ml-2">
+                        <ClipboardDocumentIcon className="w-5 h-5 mr-2" />
+                        Copy
+                      </Button>
+                      <Button onClick={handlePrint} className="ml-2">
+                        <PrinterIcon className="w-5 h-5 mr-2" />
+                        Print
+                      </Button>
                     </div>
-                  </div>
-                )}
-
-                {meetingMinutes && (
-                  <div className="mt-4">
-                    <h3 className="text-xl font-medium text-white">Meeting Minutes:</h3>
-                    <div className="mt-2 p-4 bg-gray-700 rounded-lg">
-                      <ReactMarkdown className="text-gray-300 prose prose-invert max-w-none">
-                        {meetingMinutes}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
+                    <Tabs defaultValue="minutes" className="w-full mt-6">
+                      <TabsList className="grid w-full grid-cols-2">
+                        <TabsTrigger value="minutes">Meeting Minutes</TabsTrigger>
+                        <TabsTrigger value="transcript">Full Transcript</TabsTrigger>
+                      </TabsList>
+                      <TabsContent value="minutes" className="mt-4">
+                        <h3 className="text-xl font-medium text-white mb-4">Meeting Minutes:</h3>
+                        <Accordion type="single" collapsible className="w-full">
+                          {meetingMinutes.split('\n\n').map((section, index) => {
+                            const [title, ...content] = section.split('\n');
+                            return (
+                              <AccordionItem value={`item-${index}`} key={index}>
+                                <AccordionTrigger>{highlightSearchTerm(title)}</AccordionTrigger>
+                                <AccordionContent>
+                                  <ReactMarkdown className="text-gray-300 prose prose-invert max-w-none">
+                                    {highlightSearchTerm(content.join('\n'))}
+                                  </ReactMarkdown>
+                                </AccordionContent>
+                              </AccordionItem>
+                            );
+                          })}
+                        </Accordion>
+                      </TabsContent>
+                      <TabsContent value="transcript" className="mt-4">
+                        <h3 className="text-xl font-medium text-white mb-4">Full Transcript:</h3>
+                        <div className="mt-2 p-4 bg-gray-700 rounded-lg max-h-96 overflow-y-auto">
+                          <p className="text-gray-300 whitespace-pre-wrap">{highlightSearchTerm(transcript)}</p>
+                        </div>
+                      </TabsContent>
+                    </Tabs>
+                  </>
                 )}
               </div>
             </div>
