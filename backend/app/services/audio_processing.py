@@ -1,16 +1,36 @@
-from google.cloud import speech
-from google.cloud import storage
 import os
 from flask import current_app
 import traceback
 from google.oauth2 import service_account
+from google.cloud import speech, storage
 import wave
+import audioop
 
 # Directly specify the path to your credentials file
 CREDENTIALS_PATH = "/Users/daniel.gaimvisma.com/Downloads/test-flyta-cm-c0d5ab00c3ec.json"
 
 # Load credentials
 credentials = service_account.Credentials.from_service_account_file(CREDENTIALS_PATH)
+
+
+def convert_to_mono(file_path):
+    with wave.open(file_path, 'rb') as wf:
+        if wf.getnchannels() == 2:
+            current_app.logger.info(f"Converting {file_path} to mono")
+            params = wf.getparams()
+            mono_params = params._replace(nchannels=1)
+
+            mono_path = file_path.rsplit('.', 1)[0] + '_mono.wav'
+            with wave.open(mono_path, 'wb') as mono_wf:
+                mono_wf.setparams(mono_params)
+
+                # Read frames and convert to mono
+                frames = wf.readframes(wf.getnframes())
+                mono_frames = audioop.tomono(frames, wf.getsampwidth(), 1, 1)
+                mono_wf.writeframes(mono_frames)
+
+            return mono_path
+    return file_path
 
 
 def upload_to_gcs(file_path, bucket_name):
@@ -87,13 +107,20 @@ def process_audio_file(file_path):
         # Check audio file properties
         check_audio_file(file_path)
 
+        # Convert to mono if necessary
+        mono_file_path = convert_to_mono(file_path)
+
         # Upload to Google Cloud Storage
-        gcs_uri = upload_to_gcs(file_path, current_app.config['BUCKET_NAME'])
+        gcs_uri = upload_to_gcs(mono_file_path, current_app.config['BUCKET_NAME'])
         current_app.logger.info(f"Uploaded to GCS: {gcs_uri}")
 
         # Transcribe the audio
         transcript = transcribe_audio(gcs_uri)
         current_app.logger.info("Transcription completed")
+
+        # Clean up temporary mono file if it was created
+        if mono_file_path != file_path:
+            os.remove(mono_file_path)
 
         return transcript
     except Exception as e:
