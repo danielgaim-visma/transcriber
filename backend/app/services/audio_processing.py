@@ -3,8 +3,8 @@ from flask import current_app
 import traceback
 from google.oauth2 import service_account
 from google.cloud import speech, storage
-import wave
-import audioop
+from pydub import AudioSegment
+import io
 
 # Directly specify the path to your credentials file
 CREDENTIALS_PATH = "/Users/daniel.gaimvisma.com/Downloads/test-flyta-cm-c0d5ab00c3ec.json"
@@ -13,24 +13,24 @@ CREDENTIALS_PATH = "/Users/daniel.gaimvisma.com/Downloads/test-flyta-cm-c0d5ab00
 credentials = service_account.Credentials.from_service_account_file(CREDENTIALS_PATH)
 
 
-def convert_to_mono(file_path):
-    with wave.open(file_path, 'rb') as wf:
-        if wf.getnchannels() == 2:
-            current_app.logger.info(f"Converting {file_path} to mono")
-            params = wf.getparams()
-            mono_params = params._replace(nchannels=1)
+def convert_to_mono_wav(file_path):
+    try:
+        audio = AudioSegment.from_file(file_path)
+        if audio.channels > 1:
+            audio = audio.set_channels(1)
 
-            mono_path = file_path.rsplit('.', 1)[0] + '_mono.wav'
-            with wave.open(mono_path, 'wb') as mono_wf:
-                mono_wf.setparams(mono_params)
+        # Convert to 16kHz sample rate
+        audio = audio.set_frame_rate(16000)
 
-                # Read frames and convert to mono
-                frames = wf.readframes(wf.getnframes())
-                mono_frames = audioop.tomono(frames, wf.getsampwidth(), 1, 1)
-                mono_wf.writeframes(mono_frames)
+        mono_wav_path = os.path.splitext(file_path)[0] + '_mono.wav'
+        audio.export(mono_wav_path, format="wav")
 
-            return mono_path
-    return file_path
+        current_app.logger.info(f"Converted {file_path} to mono WAV: {mono_wav_path}")
+        return mono_wav_path
+    except Exception as e:
+        current_app.logger.error(f"Error converting audio to mono WAV: {str(e)}")
+        current_app.logger.error(traceback.format_exc())
+        raise
 
 
 def upload_to_gcs(file_path, bucket_name):
@@ -78,19 +78,12 @@ def transcribe_audio(gcs_uri):
 
 def check_audio_file(file_path):
     try:
-        with wave.open(file_path, 'rb') as wav_file:
-            channels = wav_file.getnchannels()
-            sample_width = wav_file.getsampwidth()
-            frame_rate = wav_file.getframerate()
-            frames = wav_file.getnframes()
-            duration = frames / float(frame_rate)
-
-            current_app.logger.info(f"Audio file properties:")
-            current_app.logger.info(f"Channels: {channels}")
-            current_app.logger.info(f"Sample width: {sample_width} bytes")
-            current_app.logger.info(f"Frame rate: {frame_rate} Hz")
-            current_app.logger.info(f"Number of frames: {frames}")
-            current_app.logger.info(f"Duration: {duration:.2f} seconds")
+        audio = AudioSegment.from_file(file_path)
+        current_app.logger.info(f"Audio file properties:")
+        current_app.logger.info(f"Channels: {audio.channels}")
+        current_app.logger.info(f"Sample width: {audio.sample_width} bytes")
+        current_app.logger.info(f"Frame rate: {audio.frame_rate} Hz")
+        current_app.logger.info(f"Duration: {len(audio) / 1000:.2f} seconds")
     except Exception as e:
         current_app.logger.error(f"Error checking audio file: {str(e)}")
         current_app.logger.error(traceback.format_exc())
@@ -107,20 +100,19 @@ def process_audio_file(file_path):
         # Check audio file properties
         check_audio_file(file_path)
 
-        # Convert to mono if necessary
-        mono_file_path = convert_to_mono(file_path)
+        # Convert to mono WAV
+        mono_wav_path = convert_to_mono_wav(file_path)
 
         # Upload to Google Cloud Storage
-        gcs_uri = upload_to_gcs(mono_file_path, current_app.config['BUCKET_NAME'])
+        gcs_uri = upload_to_gcs(mono_wav_path, current_app.config['BUCKET_NAME'])
         current_app.logger.info(f"Uploaded to GCS: {gcs_uri}")
 
         # Transcribe the audio
         transcript = transcribe_audio(gcs_uri)
         current_app.logger.info("Transcription completed")
 
-        # Clean up temporary mono file if it was created
-        if mono_file_path != file_path:
-            os.remove(mono_file_path)
+        # Clean up temporary mono WAV file
+        os.remove(mono_wav_path)
 
         return transcript
     except Exception as e:
